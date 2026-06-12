@@ -329,12 +329,22 @@ function Dashboard({ data, go }) {
 
 // ---------- detail row helper ----------
 function DetailGrid({ rows }) {
+  const gridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+    gap: '10px 20px',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTop: '1px solid ' + C.line,
+  };
+  const labelStyle = { fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em' };
+  const valueStyle = { fontSize: 13.5, color: C.text, marginTop: 2, fontWeight: 500 };
   return (
-    <div style={{ display: “grid”, gridTemplateColumns: “repeat(auto-fill, minmax(180px, 1fr))”, gap: “10px 20px”, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+    <div style={gridStyle}>
       {rows.map(([label, value]) => (
         <div key={label}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: “uppercase”, letterSpacing: “0.05em” }}>{label}</div>
-          <div style={{ fontSize: 13.5, color: C.text, marginTop: 2, fontWeight: 500 }}>{value || “—“}</div>
+          <div style={labelStyle}>{label}</div>
+          <div style={valueStyle}>{value || '—'}</div>
         </div>
       ))}
     </div>
@@ -358,25 +368,25 @@ function Properties({ data, api }) {
 
   return (
     <div>
-      <div style={{ display: “flex”, justifyContent: “space-between”, alignItems: “center”, marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <h2 style={{ margin: 0, fontSize: 18 }}>Properties ({data.properties.length})</h2>
-        {!form && <button style={btnPrimary} onClick={() => setForm({ name: “”, address: “”, type: “House”, rent: “” })}>+ Add property</button>}
+        {!form && <button style={btnPrimary} onClick={() => setForm({ name: "", address: "", type: "House", rent: "" })}>+ Add property</button>}
       </div>
 
       {form && (
         <div style={{ ...card, marginBottom: 16, borderLeft: `4px solid ${C.leaf}` }}>
-          <h3 style={{ margin: “0 0 12px”, fontSize: 15 }}>{form.id ? “Edit property” : “New property”}</h3>
-          <div style={{ display: “flex”, gap: 12, flexWrap: “wrap” }}>
-            <Field label=”Name”><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder=”e.g. Mikocheni House 1” /></Field>
-            <Field label=”Address / area”><input style={inputStyle} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder=”e.g. Mikocheni B, Dar es Salaam” /></Field>
-            <Field label=”Type”>
+          <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>{form.id ? "Edit property" : "New property"}</h3>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <Field label="Name"><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Mikocheni House 1" /></Field>
+            <Field label="Address / area"><input style={inputStyle} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="e.g. Mikocheni B, Dar es Salaam" /></Field>
+            <Field label="Type">
               <select style={inputStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                {[“House”, “Apartment”, “Room”, “Shop/Commercial”, “Other”].map((t) => <option key={t}>{t}</option>)}
+                {["House", "Apartment", "Room", "Shop/Commercial", "Other"].map((t) => <option key={t}>{t}</option>)}
               </select>
             </Field>
-            <Field label=”Monthly rent (TZS)”><input style={inputStyle} type=”number” value={form.rent} onChange={(e) => setForm({ ...form, rent: e.target.value })} placeholder=”e.g. 800000” /></Field>
+            <Field label="Monthly rent (TZS)"><input style={inputStyle} type="number" value={form.rent} onChange={(e) => setForm({ ...form, rent: e.target.value })} placeholder="e.g. 800000" /></Field>
           </div>
-          <div style={{ display: “flex”, gap: 8, marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
             <button style={btnPrimary} onClick={submit}>Save property</button>
             <button style={btnGhost} onClick={() => setForm(null)}>Cancel</button>
           </div>
@@ -384,7 +394,7 @@ function Properties({ data, api }) {
       )}
 
       {data.properties.length === 0 && !form ? (
-        <Empty text=”No properties yet. Click “+ Add property” to register your first house.” />
+        <Empty text='No properties yet. Click "+ Add property" to register your first house.' />
       ) : (
         data.properties.map((p) => {
           const occupied = occupiedIds.has(p.id);
@@ -392,31 +402,31 @@ function Properties({ data, api }) {
           const propPayments = data.payments.filter((pay) => pay.propertyId === p.id);
           const totalCollected = propPayments.reduce((s, pay) => s + (Number(pay.amount) || 0), 0);
           const leaseMonths = tenant && tenant.leaseStart && tenant.leaseEnd
-            ? (() => { const [sy, sm] = tenant.leaseStart.split(“-”).map(Number); const [ey, em] = tenant.leaseEnd.split(“-”).map(Number); return (ey - sy) * 12 + (em - sm) + 1; })()
+            ? (() => { const [sy, sm] = tenant.leaseStart.split("-").map(Number); const [ey, em] = tenant.leaseEnd.split("-").map(Number); return (ey - sy) * 12 + (em - sm) + 1; })()
             : 0;
           const totalExpected = leaseMonths * (Number(p.rent) || 0);
           const balance = totalExpected - totalCollected;
-          const openIssues = data.maintenance.filter((m) => m.propertyId === p.id && m.status !== “done”).length;
+          const openIssues = data.maintenance.filter((m) => m.propertyId === p.id && m.status !== "done").length;
           const expanded = viewId === p.id;
           return (
             <div key={p.id} style={{ ...card, marginBottom: 10, borderLeft: `4px solid ${occupied ? C.leaf : C.amber}` }}>
-              <div style={{ display: “flex”, justifyContent: “space-between”, alignItems: “center”, flexWrap: “wrap”, gap: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
                 <div>
-                  <div style={{ display: “flex”, alignItems: “center”, gap: 10, flexWrap: “wrap” }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <strong style={{ fontSize: 15 }}>{p.name}</strong>
-                    <Badge tone={occupied ? “green” : “amber”}>{occupied ? “Occupied” : “Vacant”}</Badge>
+                    <Badge tone={occupied ? "green" : "amber"}>{occupied ? "Occupied" : "Vacant"}</Badge>
                     {tenant && leaseStatus(tenant.leaseEnd) && (
                       <Badge tone={leaseStatus(tenant.leaseEnd).tone}>{leaseStatus(tenant.leaseEnd).label}</Badge>
                     )}
-                    {openIssues > 0 && <Badge tone=”amber”>{openIssues} open issue{openIssues > 1 ? “s” : “”}</Badge>}
+                    {openIssues > 0 && <Badge tone="amber">{openIssues} open issue{openIssues > 1 ? "s" : ""}</Badge>}
                   </div>
                   <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-                    {p.type}{p.address ? “ · “ + p.address : “”} · {fmtMoney(p.rent)} / month
-                    {tenant ? “ · Tenant: “ + tenant.name : “”}
+                    {p.type}{p.address ? " · " + p.address : ""} · {fmtMoney(p.rent)} / month
+                    {tenant ? " · Tenant: " + tenant.name : ""}
                   </div>
                 </div>
-                <div style={{ display: “flex”, gap: 8, alignItems: “center” }}>
-                  <button style={btnGhost} onClick={() => setViewId(expanded ? null : p.id)}>{expanded ? “Hide” : “View”}</button>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button style={btnGhost} onClick={() => setViewId(expanded ? null : p.id)}>{expanded ? "Hide" : "View"}</button>
                   <button style={btnGhost} onClick={() => setForm(p)}>Edit</button>
                   {confirmId === p.id ? (
                     <>
@@ -431,17 +441,17 @@ function Properties({ data, api }) {
               </div>
               {expanded && (
                 <DetailGrid rows={[
-                  [“Type”, p.type],
-                  [“Address”, p.address || “—“],
-                  [“Monthly rent”, fmtMoney(p.rent)],
-                  [“Tenant”, tenant ? tenant.name : “Vacant”],
-                  [“Tenant phone”, tenant ? (tenant.phone || “—“) : “—“],
-                  [“Lease period”, tenant && tenant.leaseStart ? `${monthLabel(tenant.leaseStart)} → ${monthLabel(tenant.leaseEnd)}` : “—“],
-                  [“Lease months”, leaseMonths ? `${leaseMonths} month${leaseMonths > 1 ? “s” : “”}` : “—“],
-                  [“Total expected”, totalExpected ? fmtMoney(totalExpected) : “—“],
-                  [“Total collected”, fmtMoney(totalCollected)],
-                  [“Balance”, totalExpected ? (balance <= 0 ? “Fully paid” : fmtMoney(balance) + “ remaining”) : “—“],
-                  [“Open maintenance”, openIssues ? `${openIssues} issue${openIssues > 1 ? “s” : “”}` : “None”],
+                  ["Type", p.type],
+                  ["Address", p.address || "—"],
+                  ["Monthly rent", fmtMoney(p.rent)],
+                  ["Tenant", tenant ? tenant.name : "Vacant"],
+                  ["Tenant phone", tenant ? (tenant.phone || "—") : "—"],
+                  ["Lease period", tenant && tenant.leaseStart ? `${monthLabel(tenant.leaseStart)} → ${monthLabel(tenant.leaseEnd)}` : "—"],
+                  ["Lease months", leaseMonths ? `${leaseMonths} month${leaseMonths > 1 ? "s" : ""}` : "—"],
+                  ["Total expected", totalExpected ? fmtMoney(totalExpected) : "—"],
+                  ["Total collected", fmtMoney(totalCollected)],
+                  ["Balance", totalExpected ? (balance <= 0 ? "Fully paid" : fmtMoney(balance) + " remaining") : "—"],
+                  ["Open maintenance", openIssues ? `${openIssues} issue${openIssues > 1 ? "s" : ""}` : "None"],
                 ]} />
               )}
             </div>
