@@ -26,9 +26,12 @@ model Tenant {
   name       String
   phone      String @default("")
   propertyId String @default("")
-  leaseStart String @default("") // YYYY-MM-DD
-  leaseEnd   String @default("") // YYYY-MM-DD
+  leaseStart String @default("")
+  leaseEnd   String @default("")
   deposit    Int    @default(0)
+  status     String @default("active")   // active | removed
+  exitReason String @default("")         // non-payment | voluntary | other
+  exitDate   String @default("")         // YYYY-MM
 }
 
 model Payment {

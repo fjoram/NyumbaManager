@@ -155,6 +155,7 @@ export default function RentalManager() {
     saveProperty: (p) => call("/api/properties", { method: "POST", body: JSON.stringify(p) }),
     deleteProperty: (id) => call(`/api/properties?id=${id}`, { method: "DELETE" }),
     saveTenant: (t) => call("/api/tenants", { method: "POST", body: JSON.stringify(t) }),
+    removeTenant: (id, exitReason, exitDate) => call("/api/tenants", { method: "PATCH", body: JSON.stringify({ id, exitReason, exitDate }) }),
     deleteTenant: (id) => call(`/api/tenants?id=${id}`, { method: "DELETE" }),
     addPayments: (records) => call("/api/payments", { method: "POST", body: JSON.stringify({ records }) }),
     deletePayment: (id) => call(`/api/payments?id=${id}`, { method: "DELETE" }),
@@ -227,7 +228,8 @@ export default function RentalManager() {
 
 // ---------- dashboard ----------
 function Dashboard({ data, go }) {
-  const { properties, tenants, payments, maintenance } = data;
+  const { properties, payments, maintenance } = data;
+  const tenants = data.tenants.filter((t) => t.status !== "removed");
   const month = thisMonth();
   const occupiedIds = new Set(tenants.map((t) => t.propertyId));
   const occupied = properties.filter((p) => occupiedIds.has(p.id));
@@ -356,7 +358,7 @@ function Properties({ data, api }) {
   const [form, setForm] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
   const [viewId, setViewId] = useState(null);
-  const occupiedIds = new Set(data.tenants.map((t) => t.propertyId));
+  const occupiedIds = new Set(data.tenants.filter((t) => t.status === "active").map((t) => t.propertyId));
 
   const submit = async () => {
     if (!form.name) return;
@@ -468,6 +470,9 @@ function Tenants({ data, api }) {
   const [error, setError] = useState("");
   const [confirmId, setConfirmId] = useState(null);
   const [viewId, setViewId] = useState(null);
+  const [removeId, setRemoveId] = useState(null);
+  const [removeForm, setRemoveForm] = useState({ exitReason: "non-payment", exitDate: "" });
+  const [showFormer, setShowFormer] = useState(false);
 
   const submit = async () => {
     if (!form.name) { setError("Tenant name is required."); return; }
@@ -484,8 +489,15 @@ function Tenants({ data, api }) {
   };
 
   const remove = (id) => { api.deleteTenant(id); setConfirmId(null); };
+  const doRemove = async () => {
+    if (!removeForm.exitDate) { return; }
+    await api.removeTenant(removeId, removeForm.exitReason, removeForm.exitDate);
+    setRemoveId(null);
+  };
 
-  const takenIds = new Set(data.tenants.filter((t) => !form || t.id !== form.id).map((t) => t.propertyId));
+  const activeTenants = data.tenants.filter((t) => t.status !== "removed");
+  const formerTenants = data.tenants.filter((t) => t.status === "removed");
+  const takenIds = new Set(activeTenants.filter((t) => !form || t.id !== form.id).map((t) => t.propertyId));
   const available = data.properties.filter((p) => !takenIds.has(p.id));
 
   return (
@@ -536,10 +548,10 @@ function Tenants({ data, api }) {
         </div>
       )}
 
-      {data.tenants.length === 0 && !form ? (
-        <Empty text="No tenants yet. Add a tenant and link them to one of your properties." />
+      {activeTenants.length === 0 && !form ? (
+        <Empty text="No active tenants. Add a tenant and link them to one of your properties." />
       ) : (
-        data.tenants.map((t) => {
+        activeTenants.map((t) => {
           const prop = data.properties.find((p) => p.id === t.propertyId);
           const lease = leaseStatus(t.leaseEnd);
           const leaseMonths = t.leaseStart && t.leaseEnd
@@ -567,9 +579,10 @@ function Tenants({ data, api }) {
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <button style={btnGhost} onClick={() => setViewId(expanded ? null : t.id)}>{expanded ? "Hide" : "View"}</button>
                   <button style={btnGhost} onClick={() => setForm(t)}>Edit</button>
+                  <button style={{ ...btnGhost, color: C.amber }} onClick={() => { setRemoveId(t.id); setRemoveForm({ exitReason: "non-payment", exitDate: "" }); }}>Remove</button>
                   {confirmId === t.id ? (
                     <>
-                      <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
+                      <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete all records?</span>
                       <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(t.id)}>Yes</button>
                       <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
                     </>
@@ -593,9 +606,80 @@ function Tenants({ data, api }) {
                   ["Balance", totalExpected ? (balance <= 0 ? "✓ Fully paid" : fmtMoney(balance) + " remaining") : "—"],
                 ]} />
               )}
+              {removeId === t.id && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}`, background: "#FFF8F0", borderRadius: 8, padding: 14 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: C.amber, marginBottom: 10 }}>Remove tenant — record will be kept for history</div>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+                    <label style={{ flex: 1, minWidth: 160 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: "block", marginBottom: 5, textTransform: "uppercase" }}>Reason</span>
+                      <select style={inputStyle} value={removeForm.exitReason} onChange={(e) => setRemoveForm({ ...removeForm, exitReason: e.target.value })}>
+                        <option value="non-payment">Non-payment</option>
+                        <option value="voluntary">Voluntary departure</option>
+                        <option value="lease-expired">Lease expired</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </label>
+                    <label style={{ flex: 1, minWidth: 160 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.muted, display: "block", marginBottom: 5, textTransform: "uppercase" }}>Exit month</span>
+                      <input style={{ ...inputStyle, borderColor: !removeForm.exitDate ? C.red : C.line }} type="month" value={removeForm.exitDate} onChange={(e) => setRemoveForm({ ...removeForm, exitDate: e.target.value })} />
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button style={{ ...btnPrimary, background: C.amber }} onClick={doRemove} disabled={!removeForm.exitDate}>Confirm removal</button>
+                    <button style={btnGhost} onClick={() => setRemoveId(null)}>Cancel</button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })
+      )}
+
+      {/* Former tenants */}
+      {formerTenants.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <button
+            style={{ ...btnGhost, marginBottom: 12, fontWeight: 700 }}
+            onClick={() => setShowFormer(!showFormer)}
+          >
+            {showFormer ? "Hide" : "Show"} former tenants ({formerTenants.length})
+          </button>
+          {showFormer && formerTenants.map((t) => {
+            const prop = data.properties.find((p) => p.id === t.propertyId);
+            const totalPaid = data.payments.filter((p) => p.tenantId === t.id).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+            const reasonLabel = { "non-payment": "Non-payment", "voluntary": "Voluntary departure", "lease-expired": "Lease expired", "other": "Other" };
+            return (
+              <div key={t.id} style={{ ...card, marginBottom: 10, borderLeft: `4px solid ${C.muted}`, opacity: 0.85 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      <strong style={{ fontSize: 15 }}>{t.name}</strong>
+                      <Badge tone="gray">Removed</Badge>
+                      <Badge tone="red">{reasonLabel[t.exitReason] || t.exitReason}</Badge>
+                    </div>
+                    <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
+                      {t.phone || "No phone"} · {t.propertyId ? (prop ? prop.name : "Property deleted") : "No property"}
+                      {t.leaseStart ? ` · Lease: ${monthLabel(t.leaseStart)} → ${monthLabel(t.leaseEnd)}` : ""}
+                      {t.exitDate ? ` · Removed: ${monthLabel(t.exitDate)}` : ""}
+                      {" · Total paid: " + fmtMoney(totalPaid)}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {confirmId === t.id ? (
+                      <>
+                        <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete permanently?</span>
+                        <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(t.id)}>Yes</button>
+                        <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
+                      </>
+                    ) : (
+                      <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(t.id)}>Delete</button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
