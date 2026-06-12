@@ -1,0 +1,55 @@
+// Prisma schema for NyumbaManager
+//
+// LOCAL DEVELOPMENT: uses SQLite (a single file, zero setup).
+// PRODUCTION: switch provider to "postgresql" and set DATABASE_URL
+// to your hosted Postgres (e.g. Neon, Supabase, Railway) — see README.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Property {
+  id      String  @id
+  name    String
+  address String  @default("")
+  type    String  @default("House")
+  rent    Int     @default(0)
+}
+
+model Tenant {
+  id         String @id
+  name       String
+  phone      String @default("")
+  propertyId String @default("")
+  leaseStart String @default("") // YYYY-MM-DD
+  leaseEnd   String @default("") // YYYY-MM-DD
+  deposit    Int    @default(0)
+}
+
+model Payment {
+  id         String   @id
+  tenantId   String
+  propertyId String   @default("")
+  amount     Int
+  month      String   // YYYY-MM the payment covers
+  method     String   @default("Mobile money")
+  datePaid   String   @default("")
+  batchId    String?  // groups months paid together in one advance payment
+  batchCount Int?
+  createdAt  DateTime @default(now())
+}
+
+model Maintenance {
+  id         String   @id
+  propertyId String   @default("")
+  title      String
+  status     String   @default("open") // open | in progress | done
+  cost       Int      @default(0)
+  date       String   @default("")
+  createdAt  DateTime @default(now())
+}
