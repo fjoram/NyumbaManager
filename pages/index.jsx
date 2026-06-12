@@ -327,10 +327,25 @@ function Dashboard({ data, go }) {
   );
 }
 
+// ---------- detail row helper ----------
+function DetailGrid({ rows }) {
+  return (
+    <div style={{ display: “grid”, gridTemplateColumns: “repeat(auto-fill, minmax(180px, 1fr))”, gap: “10px 20px”, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: “uppercase”, letterSpacing: “0.05em” }}>{label}</div>
+          <div style={{ fontSize: 13.5, color: C.text, marginTop: 2, fontWeight: 500 }}>{value || “—“}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ---------- properties ----------
 function Properties({ data, api }) {
-  const [form, setForm] = useState(null); // null | {} | property being edited
+  const [form, setForm] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
+  const [viewId, setViewId] = useState(null);
   const occupiedIds = new Set(data.tenants.map((t) => t.propertyId));
 
   const submit = async () => {
@@ -343,25 +358,25 @@ function Properties({ data, api }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+      <div style={{ display: “flex”, justifyContent: “space-between”, alignItems: “center”, marginBottom: 14 }}>
         <h2 style={{ margin: 0, fontSize: 18 }}>Properties ({data.properties.length})</h2>
-        {!form && <button style={btnPrimary} onClick={() => setForm({ name: "", address: "", type: "House", rent: "" })}>+ Add property</button>}
+        {!form && <button style={btnPrimary} onClick={() => setForm({ name: “”, address: “”, type: “House”, rent: “” })}>+ Add property</button>}
       </div>
 
       {form && (
         <div style={{ ...card, marginBottom: 16, borderLeft: `4px solid ${C.leaf}` }}>
-          <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>{form.id ? "Edit property" : "New property"}</h3>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Field label="Name"><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Mikocheni House 1" /></Field>
-            <Field label="Address / area"><input style={inputStyle} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="e.g. Mikocheni B, Dar es Salaam" /></Field>
-            <Field label="Type">
+          <h3 style={{ margin: “0 0 12px”, fontSize: 15 }}>{form.id ? “Edit property” : “New property”}</h3>
+          <div style={{ display: “flex”, gap: 12, flexWrap: “wrap” }}>
+            <Field label=”Name”><input style={inputStyle} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder=”e.g. Mikocheni House 1” /></Field>
+            <Field label=”Address / area”><input style={inputStyle} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder=”e.g. Mikocheni B, Dar es Salaam” /></Field>
+            <Field label=”Type”>
               <select style={inputStyle} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                {["House", "Apartment", "Room", "Shop/Commercial", "Other"].map((t) => <option key={t}>{t}</option>)}
+                {[“House”, “Apartment”, “Room”, “Shop/Commercial”, “Other”].map((t) => <option key={t}>{t}</option>)}
               </select>
             </Field>
-            <Field label="Monthly rent (TZS)"><input style={inputStyle} type="number" value={form.rent} onChange={(e) => setForm({ ...form, rent: e.target.value })} placeholder="e.g. 800000" /></Field>
+            <Field label=”Monthly rent (TZS)”><input style={inputStyle} type=”number” value={form.rent} onChange={(e) => setForm({ ...form, rent: e.target.value })} placeholder=”e.g. 800000” /></Field>
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <div style={{ display: “flex”, gap: 8, marginTop: 14 }}>
             <button style={btnPrimary} onClick={submit}>Save property</button>
             <button style={btnGhost} onClick={() => setForm(null)}>Cancel</button>
           </div>
@@ -369,38 +384,66 @@ function Properties({ data, api }) {
       )}
 
       {data.properties.length === 0 && !form ? (
-        <Empty text="No properties yet. Click “+ Add property” to register your first house." />
+        <Empty text=”No properties yet. Click “+ Add property” to register your first house.” />
       ) : (
         data.properties.map((p) => {
           const occupied = occupiedIds.has(p.id);
           const tenant = data.tenants.find((t) => t.propertyId === p.id);
+          const propPayments = data.payments.filter((pay) => pay.propertyId === p.id);
+          const totalCollected = propPayments.reduce((s, pay) => s + (Number(pay.amount) || 0), 0);
+          const leaseMonths = tenant && tenant.leaseStart && tenant.leaseEnd
+            ? (() => { const [sy, sm] = tenant.leaseStart.split(“-”).map(Number); const [ey, em] = tenant.leaseEnd.split(“-”).map(Number); return (ey - sy) * 12 + (em - sm) + 1; })()
+            : 0;
+          const totalExpected = leaseMonths * (Number(p.rent) || 0);
+          const balance = totalExpected - totalCollected;
+          const openIssues = data.maintenance.filter((m) => m.propertyId === p.id && m.status !== “done”).length;
+          const expanded = viewId === p.id;
           return (
-            <div key={p.id} style={{ ...card, marginBottom: 10, borderLeft: `4px solid ${occupied ? C.leaf : C.amber}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <strong style={{ fontSize: 15 }}>{p.name}</strong>
-                  <Badge tone={occupied ? "green" : "amber"}>{occupied ? "Occupied" : "Vacant"}</Badge>
-                  {tenant && leaseStatus(tenant.leaseEnd) && (
-                    <Badge tone={leaseStatus(tenant.leaseEnd).tone}>{leaseStatus(tenant.leaseEnd).label}</Badge>
+            <div key={p.id} style={{ ...card, marginBottom: 10, borderLeft: `4px solid ${occupied ? C.leaf : C.amber}` }}>
+              <div style={{ display: “flex”, justifyContent: “space-between”, alignItems: “center”, flexWrap: “wrap”, gap: 10 }}>
+                <div>
+                  <div style={{ display: “flex”, alignItems: “center”, gap: 10, flexWrap: “wrap” }}>
+                    <strong style={{ fontSize: 15 }}>{p.name}</strong>
+                    <Badge tone={occupied ? “green” : “amber”}>{occupied ? “Occupied” : “Vacant”}</Badge>
+                    {tenant && leaseStatus(tenant.leaseEnd) && (
+                      <Badge tone={leaseStatus(tenant.leaseEnd).tone}>{leaseStatus(tenant.leaseEnd).label}</Badge>
+                    )}
+                    {openIssues > 0 && <Badge tone=”amber”>{openIssues} open issue{openIssues > 1 ? “s” : “”}</Badge>}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
+                    {p.type}{p.address ? “ · “ + p.address : “”} · {fmtMoney(p.rent)} / month
+                    {tenant ? “ · Tenant: “ + tenant.name : “”}
+                  </div>
+                </div>
+                <div style={{ display: “flex”, gap: 8, alignItems: “center” }}>
+                  <button style={btnGhost} onClick={() => setViewId(expanded ? null : p.id)}>{expanded ? “Hide” : “View”}</button>
+                  <button style={btnGhost} onClick={() => setForm(p)}>Edit</button>
+                  {confirmId === p.id ? (
+                    <>
+                      <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
+                      <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(p.id)}>Yes</button>
+                      <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
+                    </>
+                  ) : (
+                    <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(p.id)}>Delete</button>
                   )}
                 </div>
-                <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-                  {p.type}{p.address ? " · " + p.address : ""} · {fmtMoney(p.rent)} / month
-                  {tenant ? " · Tenant: " + tenant.name : ""}
-                </div>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button style={btnGhost} onClick={() => setForm(p)}>Edit</button>
-                {confirmId === p.id ? (
-                  <>
-                    <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
-                    <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(p.id)}>Yes</button>
-                    <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
-                  </>
-                ) : (
-                  <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(p.id)}>Delete</button>
-                )}
-              </div>
+              {expanded && (
+                <DetailGrid rows={[
+                  [“Type”, p.type],
+                  [“Address”, p.address || “—“],
+                  [“Monthly rent”, fmtMoney(p.rent)],
+                  [“Tenant”, tenant ? tenant.name : “Vacant”],
+                  [“Tenant phone”, tenant ? (tenant.phone || “—“) : “—“],
+                  [“Lease period”, tenant && tenant.leaseStart ? `${monthLabel(tenant.leaseStart)} → ${monthLabel(tenant.leaseEnd)}` : “—“],
+                  [“Lease months”, leaseMonths ? `${leaseMonths} month${leaseMonths > 1 ? “s” : “”}` : “—“],
+                  [“Total expected”, totalExpected ? fmtMoney(totalExpected) : “—“],
+                  [“Total collected”, fmtMoney(totalCollected)],
+                  [“Balance”, totalExpected ? (balance <= 0 ? “Fully paid” : fmtMoney(balance) + “ remaining”) : “—“],
+                  [“Open maintenance”, openIssues ? `${openIssues} issue${openIssues > 1 ? “s” : “”}` : “None”],
+                ]} />
+              )}
             </div>
           );
         })
@@ -414,6 +457,7 @@ function Tenants({ data, api }) {
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
   const [confirmId, setConfirmId] = useState(null);
+  const [viewId, setViewId] = useState(null);
 
   const submit = async () => {
     if (!form.name) { setError("Tenant name is required."); return; }
@@ -488,30 +532,57 @@ function Tenants({ data, api }) {
         data.tenants.map((t) => {
           const prop = data.properties.find((p) => p.id === t.propertyId);
           const lease = leaseStatus(t.leaseEnd);
+          const leaseMonths = t.leaseStart && t.leaseEnd
+            ? (() => { const [sy, sm] = t.leaseStart.split("-").map(Number); const [ey, em] = t.leaseEnd.split("-").map(Number); return (ey - sy) * 12 + (em - sm) + 1; })()
+            : 0;
+          const rent = prop ? Number(prop.rent) || 0 : 0;
+          const totalExpected = leaseMonths * rent;
+          const totalPaid = data.payments.filter((p) => p.tenantId === t.id).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+          const balance = totalExpected - totalPaid;
+          const monthsPaid = rent > 0 ? Math.floor(totalPaid / rent) : 0;
+          const expanded = viewId === t.id;
           return (
-            <div key={t.id} style={{ ...card, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-              <div>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                  <strong style={{ fontSize: 15 }}>{t.name}</strong>
-                  {lease && <Badge tone={lease.tone}>{lease.label}</Badge>}
+            <div key={t.id} style={{ ...card, marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: 15 }}>{t.name}</strong>
+                    {lease && <Badge tone={lease.tone}>{lease.label}</Badge>}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
+                    {t.phone || "No phone"} · {prop ? prop.name : "Not assigned to a property"}
+                    {t.leaseStart ? ` · Lease: ${monthLabel(t.leaseStart)}${t.leaseEnd ? " → " + monthLabel(t.leaseEnd) : ""}` : ""}
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-                  {t.phone || "No phone"} · {prop ? prop.name : "Not assigned to a property"}
-                  {t.leaseStart ? " · Lease: " + t.leaseStart + (t.leaseEnd ? " → " + t.leaseEnd : "") : t.leaseEnd ? " · Lease ends " + t.leaseEnd : ""}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button style={btnGhost} onClick={() => setViewId(expanded ? null : t.id)}>{expanded ? "Hide" : "View"}</button>
+                  <button style={btnGhost} onClick={() => setForm(t)}>Edit</button>
+                  {confirmId === t.id ? (
+                    <>
+                      <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
+                      <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(t.id)}>Yes</button>
+                      <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
+                    </>
+                  ) : (
+                    <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(t.id)}>Delete</button>
+                  )}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button style={btnGhost} onClick={() => setForm(t)}>Edit</button>
-                {confirmId === t.id ? (
-                  <>
-                    <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
-                    <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(t.id)}>Yes</button>
-                    <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
-                  </>
-                ) : (
-                  <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(t.id)}>Delete</button>
-                )}
-              </div>
+              {expanded && (
+                <DetailGrid rows={[
+                  ["Phone", t.phone || "—"],
+                  ["Property", prop ? prop.name : "Not assigned"],
+                  ["Property address", prop && prop.address ? prop.address : "—"],
+                  ["Monthly rent", prop ? fmtMoney(prop.rent) : "—"],
+                  ["Lease start", t.leaseStart ? monthLabel(t.leaseStart) : "—"],
+                  ["Lease end", t.leaseEnd ? monthLabel(t.leaseEnd) : "—"],
+                  ["Total months", leaseMonths ? `${leaseMonths} month${leaseMonths > 1 ? "s" : ""}` : "—"],
+                  ["Total expected", totalExpected ? fmtMoney(totalExpected) : "—"],
+                  ["Total paid", fmtMoney(totalPaid)],
+                  ["Months paid", rent > 0 ? `${monthsPaid} of ${leaseMonths}` : "—"],
+                  ["Balance", totalExpected ? (balance <= 0 ? "✓ Fully paid" : fmtMoney(balance) + " remaining") : "—"],
+                ]} />
+              )}
             </div>
           );
         })
@@ -525,6 +596,7 @@ function Payments({ data, api }) {
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
   const [confirmId, setConfirmId] = useState(null);
+  const [viewId, setViewId] = useState(null);
 
   // total months in a tenant's lease (capped at 48)
   const leaseMonthCount = (t) => {
@@ -769,26 +841,44 @@ function Payments({ data, api }) {
         data.payments.map((p) => {
           const t = data.tenants.find((x) => x.id === p.tenantId);
           const prop = data.properties.find((x) => x.id === p.propertyId);
+          const expanded = viewId === p.id;
           return (
-            <div key={p.id} style={{ ...card, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-              <div>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                  <strong style={{ fontSize: 15 }}>{fmtMoney(p.amount)}</strong>
-                  <Badge tone="green">{monthLabel(p.month)}</Badge>
-                  {p.batchId && <Badge tone="gray">part of {p.batchCount}-month payment</Badge>}
+            <div key={p.id} style={{ ...card, marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: 15 }}>{fmtMoney(p.amount)}</strong>
+                    <Badge tone="green">{monthLabel(p.month)}</Badge>
+                    {p.batchId && <Badge tone="gray">part of {p.batchCount}-month payment</Badge>}
+                  </div>
+                  <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
+                    {t ? t.name : "Unknown tenant"}{prop ? " · " + prop.name : ""} · {p.method} · paid {p.datePaid}
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-                  {t ? t.name : "Unknown tenant"}{prop ? " · " + prop.name : ""} · {p.method} · paid {p.datePaid}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button style={btnGhost} onClick={() => setViewId(expanded ? null : p.id)}>{expanded ? "Hide" : "View"}</button>
+                  {confirmId === p.id ? (
+                    <>
+                      <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
+                      <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(p.id)}>Yes</button>
+                      <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
+                    </>
+                  ) : (
+                    <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(p.id)}>Delete</button>
+                  )}
                 </div>
               </div>
-              {confirmId === p.id ? (
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
-                  <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(p.id)}>Yes</button>
-                  <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
-                </div>
-              ) : (
-                <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(p.id)}>Delete</button>
+              {expanded && (
+                <DetailGrid rows={[
+                  ["Tenant", t ? t.name : "—"],
+                  ["Tenant phone", t ? (t.phone || "—") : "—"],
+                  ["Property", prop ? prop.name : "—"],
+                  ["Month covered", monthLabel(p.month)],
+                  ["Amount", fmtMoney(p.amount)],
+                  ["Payment method", p.method],
+                  ["Date paid", p.datePaid || "—"],
+                  ["Batch", p.batchId ? `Part of ${p.batchCount}-month payment` : "Single month"],
+                ]} />
               )}
             </div>
           );
@@ -802,6 +892,7 @@ function Payments({ data, api }) {
 function Maintenance({ data, api }) {
   const [form, setForm] = useState(null);
   const [confirmId, setConfirmId] = useState(null);
+  const [viewId, setViewId] = useState(null);
 
   const submit = async () => {
     if (!form.title) return;
@@ -849,34 +940,50 @@ function Maintenance({ data, api }) {
       ) : (
         data.maintenance.map((m) => {
           const prop = data.properties.find((p) => p.id === m.propertyId);
+          const daysOpen = m.date ? Math.ceil((new Date() - new Date(m.date)) / (1000 * 60 * 60 * 24)) : null;
+          const expanded = viewId === m.id;
           return (
-            <div key={m.id} style={{ ...card, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-              <div>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                  <strong style={{ fontSize: 15 }}>{m.title}</strong>
-                  <Badge tone={statusTone[m.status] || "gray"}>{m.status}</Badge>
+            <div key={m.id} style={{ ...card, marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                <div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <strong style={{ fontSize: 15 }}>{m.title}</strong>
+                    <Badge tone={statusTone[m.status] || "gray"}>{m.status}</Badge>
+                  </div>
+                  <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
+                    {prop ? prop.name : "No property"} · reported {m.date}{m.cost ? " · est. " + fmtMoney(m.cost) : ""}
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
-                  {prop ? prop.name : "No property"} · reported {m.date}{m.cost ? " · est. " + fmtMoney(m.cost) : ""}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button style={btnGhost} onClick={() => setViewId(expanded ? null : m.id)}>{expanded ? "Hide" : "View"}</button>
+                  {m.status !== "in progress" && m.status !== "done" && (
+                    <button style={btnGhost} onClick={() => setStatus(m.id, "in progress")}>Start</button>
+                  )}
+                  {m.status !== "done" && (
+                    <button style={{ ...btnGhost, color: C.leafDark }} onClick={() => setStatus(m.id, "done")}>Mark done</button>
+                  )}
+                  {confirmId === m.id ? (
+                    <>
+                      <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
+                      <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(m.id)}>Yes</button>
+                      <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
+                    </>
+                  ) : (
+                    <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(m.id)}>Delete</button>
+                  )}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {m.status !== "in progress" && m.status !== "done" && (
-                  <button style={btnGhost} onClick={() => setStatus(m.id, "in progress")}>Start</button>
-                )}
-                {m.status !== "done" && (
-                  <button style={{ ...btnGhost, color: C.leafDark }} onClick={() => setStatus(m.id, "done")}>Mark done</button>
-                )}
-                {confirmId === m.id ? (
-                  <>
-                    <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
-                    <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(m.id)}>Yes</button>
-                    <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
-                  </>
-                ) : (
-                  <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(m.id)}>Delete</button>
-                )}
-              </div>
+              {expanded && (
+                <DetailGrid rows={[
+                  ["Property", prop ? prop.name : "—"],
+                  ["Property address", prop && prop.address ? prop.address : "—"],
+                  ["Issue", m.title],
+                  ["Status", m.status],
+                  ["Date reported", m.date || "—"],
+                  ["Days open", daysOpen !== null ? (m.status === "done" ? "Resolved" : `${daysOpen} day${daysOpen !== 1 ? "s" : ""}`) : "—"],
+                  ["Estimated cost", m.cost ? fmtMoney(m.cost) : "—"],
+                ]} />
+              )}
             </div>
           );
         })
