@@ -15,7 +15,11 @@ const monthLabel = (ym) => {
 // Returns null, or {label, tone, days} describing how close the lease end is
 const leaseStatus = (leaseEnd) => {
   if (!leaseEnd) return null;
-  const days = Math.ceil((new Date(leaseEnd) - new Date()) / (1000 * 60 * 60 * 24));
+  // support both YYYY-MM and YYYY-MM-DD; treat month as ending on last day
+  const dateStr = leaseEnd.length === 7
+    ? (() => { const [y, m] = leaseEnd.split("-").map(Number); return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`; })()
+    : leaseEnd;
+  const days = Math.ceil((new Date(dateStr) - new Date()) / (1000 * 60 * 60 * 24));
   if (days < 0) return { label: "Lease expired", tone: "red", days };
   if (days <= 30) return { label: `Ends in ${days} day${days === 1 ? "" : "s"} — give notice now!`, tone: "red", days };
   if (days <= 90) return { label: `Ends in ${days} days — plan notice`, tone: "amber", days };
@@ -415,7 +419,7 @@ function Tenants({ data, api }) {
     if (!form.name) { setError("Tenant name is required."); return; }
     if (!form.leaseStart) { setError("Lease start date is required."); return; }
     if (!form.leaseEnd) { setError("Lease end date is required."); return; }
-    if (new Date(form.leaseEnd) <= new Date(form.leaseStart)) { setError("Lease end date must be after the lease start date."); return; }
+    if (form.leaseEnd <= form.leaseStart) { setError("Lease end month must be after the lease start month."); return; }
     setError("");
     try {
       await api.saveTenant({ ...form, id: form.id || uid() });
@@ -449,8 +453,8 @@ function Tenants({ data, api }) {
                 {available.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
-            <Field label="Lease start (required)"><input style={{ ...inputStyle, borderColor: error && !form.leaseStart ? C.red : C.line }} type="date" value={form.leaseStart} onChange={(e) => setForm({ ...form, leaseStart: e.target.value })} /></Field>
-            <Field label="Lease end (required)"><input style={{ ...inputStyle, borderColor: error && !form.leaseEnd ? C.red : C.line }} type="date" value={form.leaseEnd || ""} onChange={(e) => setForm({ ...form, leaseEnd: e.target.value })} /></Field>
+            <Field label="Lease start (required)"><input style={{ ...inputStyle, borderColor: error && !form.leaseStart ? C.red : C.line }} type="month" value={form.leaseStart} onChange={(e) => setForm({ ...form, leaseStart: e.target.value })} /></Field>
+            <Field label="Lease end (required)"><input style={{ ...inputStyle, borderColor: error && !form.leaseEnd ? C.red : C.line }} type="month" value={form.leaseEnd || ""} onChange={(e) => setForm({ ...form, leaseEnd: e.target.value })} /></Field>
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
             <button style={btnPrimary} onClick={submit}>Save tenant</button>
@@ -463,9 +467,10 @@ function Tenants({ data, api }) {
             {(() => {
               const prop = data.properties.find((p) => p.id === form.propertyId);
               if (!prop || !form.leaseStart || !form.leaseEnd) return null;
-              const days = (new Date(form.leaseEnd) - new Date(form.leaseStart)) / (1000 * 60 * 60 * 24);
-              if (days <= 0) return <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>⚠ Lease end must be after lease start</span>;
-              const months = Math.max(1, Math.round(days / 30.44));
+              if (form.leaseEnd <= form.leaseStart) return <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>⚠ Lease end must be after lease start</span>;
+              const [sy, sm] = form.leaseStart.split("-").map(Number);
+              const [ey, em] = form.leaseEnd.split("-").map(Number);
+              const months = (ey - sy) * 12 + (em - sm) + 1;
               const total = months * (Number(prop.rent) || 0);
               return (
                 <span style={{ fontSize: 13.5, color: C.leafDark, fontWeight: 700, background: "#E4F2E9", padding: "7px 12px", borderRadius: 8 }}>
@@ -706,20 +711,31 @@ function Payments({ data, api }) {
               })()}
             </Field>
             <Field label="Months covered">
-              <select
-                style={inputStyle}
-                value={form.monthsCount}
-                onChange={(e) => {
-                  const count = Number(e.target.value);
-                  const t = data.tenants.find((x) => x.id === form.tenantId);
-                  const prop = t && data.properties.find((p) => p.id === t.propertyId);
-                  setForm({ ...form, monthsCount: count, amount: prop ? Number(prop.rent) * count : form.amount });
-                }}
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => (
-                  <option key={n} value={n}>{n === 1 ? "1 month" : n + " months"}</option>
-                ))}
-              </select>
+              {(() => {
+                const t = data.tenants.find((x) => x.id === form.tenantId);
+                const prop = t && data.properties.find((p) => p.id === t.propertyId);
+                const totalMonths = t ? leaseMonthCount(t) : 12;
+                const alreadyPaid = t
+                  ? data.payments.filter((p) => p.tenantId === t.id).reduce((s, p) => s + (Number(p.amount) || 0), 0)
+                  : 0;
+                const rent = prop ? Number(prop.rent) || 0 : 0;
+                const paidMonths = rent > 0 ? Math.floor(alreadyPaid / rent) : 0;
+                const remaining = Math.max(1, totalMonths - paidMonths);
+                return (
+                  <select
+                    style={inputStyle}
+                    value={form.monthsCount}
+                    onChange={(e) => {
+                      const count = Number(e.target.value);
+                      setForm({ ...form, monthsCount: count, amount: prop ? Number(prop.rent) * count : form.amount });
+                    }}
+                  >
+                    {Array.from({ length: remaining }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={n}>{n === 1 ? "1 month" : n + " months"}</option>
+                    ))}
+                  </select>
+                );
+              })()}
             </Field>
             <Field label="Total amount (TZS)"><input style={inputStyle} type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
             <Field label="Starting month"><input style={inputStyle} type="month" value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })} /></Field>

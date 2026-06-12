@@ -8,8 +8,8 @@ export default async function handler(req, res) {
       if (!t.name) return res.status(400).json({ error: "Tenant name is required." });
       if (!t.leaseStart) return res.status(400).json({ error: "Lease start date is required." });
       if (!t.leaseEnd) return res.status(400).json({ error: "Lease end date is required." });
-      if (new Date(t.leaseEnd) <= new Date(t.leaseStart))
-        return res.status(400).json({ error: "Lease end date must be after the lease start date." });
+      if (t.leaseEnd <= t.leaseStart)
+        return res.status(400).json({ error: "Lease end month must be after the lease start month." });
 
       if (t.propertyId) {
         const existing = await prisma.tenant.findFirst({ where: { propertyId: t.propertyId } });
