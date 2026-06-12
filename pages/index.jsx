@@ -756,17 +756,27 @@ function Payments({ data, api }) {
                 const rent = Number(prop.rent) || 0;
                 const expected = leaseMonths.length * rent;
                 const pending = expected - paid;
-                const pendingMonths = leaseMonths.filter((mo) => (paidByMonth[mo] || 0) < rent);
+
+                // Waterfall: distribute total paid across lease months in order
+                // so that a 2-month payment recorded under June auto-covers July too
+                const effectivePaid = {};
+                let remainder = paid;
+                for (const mo of leaseMonths) {
+                  if (remainder <= 0) break;
+                  effectivePaid[mo] = Math.min(remainder, rent);
+                  remainder -= effectivePaid[mo];
+                }
+                const pendingMonths = leaseMonths.filter((mo) => (effectivePaid[mo] || 0) < rent);
 
                 const chip = (mo) => {
-                  const amt = paidByMonth[mo] || 0;
+                  const amt = effectivePaid[mo] || 0;
                   const full = amt >= rent && rent > 0;
                   const partial = amt > 0 && !full;
                   const bg = full ? "#E4F2E9" : partial ? "#FAF0D8" : "#F8E4DF";
                   const fg = full ? C.leafDark : partial ? "#8A6212" : C.red;
                   return (
                     <span key={mo} style={{ background: bg, color: fg, fontSize: 12, fontWeight: 700, padding: "4px 9px", borderRadius: 7, whiteSpace: "nowrap" }}>
-                      {monthLabel(mo)} {full ? "✓ " + fmtMoney(amt) : partial ? "½ " + fmtMoney(amt) + " of " + fmtMoney(rent) : "· pending"}
+                      {monthLabel(mo)} {full ? "✓ " + fmtMoney(rent) : partial ? "½ " + fmtMoney(amt) + " of " + fmtMoney(rent) : "· pending"}
                     </span>
                   );
                 };
