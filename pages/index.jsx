@@ -710,7 +710,13 @@ function Payments({ data, api }) {
                   const t = data.tenants.find((x) => x.id === e.target.value);
                   const prop = t && data.properties.find((p) => p.id === t.propertyId);
                   const count = Math.max(1, Number(form.monthsCount) || 1);
-                  setForm({ ...form, tenantId: e.target.value, amount: prop ? Number(prop.rent) * count : form.amount });
+                  const rent = prop ? Number(prop.rent) || 0 : 0;
+                  const totalMonths = t ? leaseMonthCount(t) : 0;
+                  const alreadyPaid = t ? data.payments.filter((p) => p.tenantId === t.id).reduce((s, p) => s + (Number(p.amount) || 0), 0) : 0;
+                  const pending = totalMonths * rent - alreadyPaid;
+                  const rawAmount = rent * count;
+                  const amount = prop ? (pending > 0 ? Math.min(rawAmount, pending) : rawAmount) : form.amount;
+                  setForm({ ...form, tenantId: e.target.value, amount });
                 }}
               >
                 <option value="">— select —</option>
@@ -809,7 +815,13 @@ function Payments({ data, api }) {
                     value={form.monthsCount}
                     onChange={(e) => {
                       const count = Number(e.target.value);
-                      setForm({ ...form, monthsCount: count, amount: prop ? Number(prop.rent) * count : form.amount });
+                      const rentAmt = prop ? Number(prop.rent) || 0 : 0;
+                      const totalMonths = t ? leaseMonthCount(t) : 0;
+                      const alreadyPaid = t ? data.payments.filter((p) => p.tenantId === t.id).reduce((s, p) => s + (Number(p.amount) || 0), 0) : 0;
+                      const pending = totalMonths * rentAmt - alreadyPaid;
+                      const rawAmount = rentAmt * count;
+                      const amount = prop ? (pending > 0 ? Math.min(rawAmount, pending) : rawAmount) : form.amount;
+                      setForm({ ...form, monthsCount: count, amount });
                     }}
                   >
                     {Array.from({ length: remaining }, (_, i) => i + 1).map((n) => (
