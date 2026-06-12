@@ -326,6 +326,7 @@ function Dashboard({ data, go }) {
 // ---------- properties ----------
 function Properties({ data, api }) {
   const [form, setForm] = useState(null); // null | {} | property being edited
+  const [confirmId, setConfirmId] = useState(null);
   const occupiedIds = new Set(data.tenants.map((t) => t.propertyId));
 
   const submit = async () => {
@@ -334,7 +335,7 @@ function Properties({ data, api }) {
     setForm(null);
   };
 
-  const remove = (id) => api.deleteProperty(id);
+  const remove = (id) => { api.deleteProperty(id); setConfirmId(null); };
 
   return (
     <div>
@@ -384,9 +385,17 @@ function Properties({ data, api }) {
                   {tenant ? " · Tenant: " + tenant.name : ""}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button style={btnGhost} onClick={() => setForm(p)}>Edit</button>
-                <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(p.id)}>Delete</button>
+                {confirmId === p.id ? (
+                  <>
+                    <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
+                    <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(p.id)}>Yes</button>
+                    <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
+                  </>
+                ) : (
+                  <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(p.id)}>Delete</button>
+                )}
               </div>
             </div>
           );
@@ -400,6 +409,7 @@ function Properties({ data, api }) {
 function Tenants({ data, api }) {
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
+  const [confirmId, setConfirmId] = useState(null);
 
   const submit = async () => {
     if (!form.name) { setError("Tenant name is required."); return; }
@@ -415,7 +425,7 @@ function Tenants({ data, api }) {
     }
   };
 
-  const remove = (id) => api.deleteTenant(id);
+  const remove = (id) => { api.deleteTenant(id); setConfirmId(null); };
 
   const takenIds = new Set(data.tenants.filter((t) => !form || t.id !== form.id).map((t) => t.propertyId));
   const available = data.properties.filter((p) => !takenIds.has(p.id));
@@ -487,9 +497,17 @@ function Tenants({ data, api }) {
                   {t.deposit ? " · Deposit " + fmtMoney(t.deposit) : ""}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <button style={btnGhost} onClick={() => setForm(t)}>Edit</button>
-                <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(t.id)}>Delete</button>
+                {confirmId === t.id ? (
+                  <>
+                    <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
+                    <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(t.id)}>Yes</button>
+                    <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
+                  </>
+                ) : (
+                  <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(t.id)}>Delete</button>
+                )}
               </div>
             </div>
           );
@@ -503,6 +521,7 @@ function Tenants({ data, api }) {
 function Payments({ data, api }) {
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
+  const [confirmId, setConfirmId] = useState(null);
 
   // total months in a tenant's lease (capped at 48)
   const leaseMonthCount = (t) => {
@@ -578,7 +597,7 @@ function Payments({ data, api }) {
     }
   };
 
-  const remove = (id) => api.deletePayment(id);
+  const remove = (id) => { api.deletePayment(id); setConfirmId(null); };
 
   return (
     <div>
@@ -748,7 +767,15 @@ function Payments({ data, api }) {
                   {t ? t.name : "Unknown tenant"}{prop ? " · " + prop.name : ""} · {p.method} · paid {p.datePaid}
                 </div>
               </div>
-              <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(p.id)}>Delete</button>
+              {confirmId === p.id ? (
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
+                  <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(p.id)}>Yes</button>
+                  <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
+                </div>
+              ) : (
+                <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(p.id)}>Delete</button>
+              )}
             </div>
           );
         })
@@ -760,6 +787,7 @@ function Payments({ data, api }) {
 // ---------- maintenance ----------
 function Maintenance({ data, api }) {
   const [form, setForm] = useState(null);
+  const [confirmId, setConfirmId] = useState(null);
 
   const submit = async () => {
     if (!form.title) return;
@@ -770,7 +798,7 @@ function Maintenance({ data, api }) {
 
   const setStatus = (id, status) => api.setMaintenanceStatus(id, status);
 
-  const remove = (id) => api.deleteMaintenance(id);
+  const remove = (id) => { api.deleteMaintenance(id); setConfirmId(null); };
 
   const statusTone = { open: "red", "in progress": "amber", done: "green" };
 
@@ -818,14 +846,22 @@ function Maintenance({ data, api }) {
                   {prop ? prop.name : "No property"} · reported {m.date}{m.cost ? " · est. " + fmtMoney(m.cost) : ""}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {m.status !== "in progress" && m.status !== "done" && (
                   <button style={btnGhost} onClick={() => setStatus(m.id, "in progress")}>Start</button>
                 )}
                 {m.status !== "done" && (
                   <button style={{ ...btnGhost, color: C.leafDark }} onClick={() => setStatus(m.id, "done")}>Mark done</button>
                 )}
-                <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(m.id)}>Delete</button>
+                {confirmId === m.id ? (
+                  <>
+                    <span style={{ fontSize: 13, color: C.red, fontWeight: 600 }}>Delete?</span>
+                    <button style={{ ...btnGhost, color: C.red }} onClick={() => remove(m.id)}>Yes</button>
+                    <button style={btnGhost} onClick={() => setConfirmId(null)}>No</button>
+                  </>
+                ) : (
+                  <button style={{ ...btnGhost, color: C.red }} onClick={() => setConfirmId(m.id)}>Delete</button>
+                )}
               </div>
             </div>
           );
