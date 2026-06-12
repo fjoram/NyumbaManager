@@ -23,7 +23,6 @@ export default async function handler(req, res) {
         propertyId: t.propertyId || "",
         leaseStart: t.leaseStart,
         leaseEnd: t.leaseEnd,
-        deposit: Number(t.deposit) || 0,
       };
       const saved = await prisma.tenant.upsert({
         where: { id: t.id },

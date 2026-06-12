@@ -434,7 +434,7 @@ function Tenants({ data, api }) {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <h2 style={{ margin: 0, fontSize: 18 }}>Tenants ({data.tenants.length})</h2>
-        {!form && <button style={btnPrimary} onClick={() => setForm({ name: "", phone: "", propertyId: "", leaseStart: "", leaseEnd: "", deposit: "" })}>+ Add tenant</button>}
+        {!form && <button style={btnPrimary} onClick={() => setForm({ name: "", phone: "", propertyId: "", leaseStart: "", leaseEnd: "" })}>+ Add tenant</button>}
       </div>
 
       {form && (
@@ -451,7 +451,6 @@ function Tenants({ data, api }) {
             </Field>
             <Field label="Lease start (required)"><input style={{ ...inputStyle, borderColor: error && !form.leaseStart ? C.red : C.line }} type="date" value={form.leaseStart} onChange={(e) => setForm({ ...form, leaseStart: e.target.value })} /></Field>
             <Field label="Lease end (required)"><input style={{ ...inputStyle, borderColor: error && !form.leaseEnd ? C.red : C.line }} type="date" value={form.leaseEnd || ""} onChange={(e) => setForm({ ...form, leaseEnd: e.target.value })} /></Field>
-            <Field label="Deposit (TZS)"><input style={inputStyle} type="number" value={form.deposit} onChange={(e) => setForm({ ...form, deposit: e.target.value })} /></Field>
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
             <button style={btnPrimary} onClick={submit}>Save tenant</button>
@@ -494,7 +493,6 @@ function Tenants({ data, api }) {
                 <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>
                   {t.phone || "No phone"} · {prop ? prop.name : "Not assigned to a property"}
                   {t.leaseStart ? " · Lease: " + t.leaseStart + (t.leaseEnd ? " → " + t.leaseEnd : "") : t.leaseEnd ? " · Lease ends " + t.leaseEnd : ""}
-                  {t.deposit ? " · Deposit " + fmtMoney(t.deposit) : ""}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
