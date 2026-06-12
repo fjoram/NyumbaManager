@@ -11,6 +11,12 @@ export default async function handler(req, res) {
       if (new Date(t.leaseEnd) <= new Date(t.leaseStart))
         return res.status(400).json({ error: "Lease end date must be after the lease start date." });
 
+      if (t.propertyId) {
+        const existing = await prisma.tenant.findFirst({ where: { propertyId: t.propertyId } });
+        if (existing && existing.id !== t.id)
+          return res.status(400).json({ error: `This property is already occupied by ${existing.name}.` });
+      }
+
       const data = {
         name: t.name,
         phone: t.phone || "",
